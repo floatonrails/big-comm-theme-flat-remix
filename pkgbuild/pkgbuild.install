@@ -150,7 +150,7 @@ post_install() {
 
     # Create symbolic link in user's .config directory pointing to assets
     printMsg "Creating symbolic link for assets in $user_home/.config..."
-    ln -sf "$THEMES_DIR/Dracula-Theme/assets" "$user_home/.config/assets"
+    ln -sf "$THEMES_DIR/Dracula/assets" "$user_home/.config/assets"
     chown -h "$user:$user" "$user_home/.config/assets"
 
     printMsg "Dracula theme applied successfully!"

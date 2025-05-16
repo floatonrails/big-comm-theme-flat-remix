@@ -45,9 +45,9 @@ post_install() {
 
     printMsg "Removing temporary files..."
     
-    rm -f "/usr/share/Nordic-cursors.tar.zst"
-    rm -f "/usr/share/Dracula-Icons.tar.zst"
-    rm -f "/usr/share/dracula.avif"
+    #rm -f "/usr/share/Nordic-cursors.tar.zst"
+    #rm -f "/usr/share/Dracula-Icons.tar.zst"
+    #rm -f "/usr/share/dracula.avif"
 
     printMsg "Applying Dracula theme for GNOME and configuring GTK..."
 

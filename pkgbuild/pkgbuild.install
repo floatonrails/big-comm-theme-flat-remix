@@ -1,253 +1,253 @@
-# Installation file for Arch Linux packages
-
-# Color definitions for status messages
-blueDark="\e[1;38;5;33m"     # Bold dark blue
-mediumBlue="\e[1;38;5;32m"   # Bold medium blue
-lightBlue="\e[1;38;5;39m"    # Bold light blue
-cyan="\e[1;38;5;45m"         # Bold cyan
-white="\e[1;97m"             # Bold white
-reset="\e[0m"                # Reset text formatting
-
-# Print status messages - CHANGE 'PACKAGE_NAME' to your actual package name
-printMsg() {
-    local message=$1
-    echo -e "${blueDark}[${lightBlue}comm-gnome-theme-dracula${blueDark}]${reset} ${cyan}→${reset} ${white}${message}${reset}"
-}
-
-# Function executed before package installation
-pre_install() {
-    printMsg "Preparing to install Dracula theme for GNOME..."
-
-    # Check if GNOME is in use
-    if [ "$XDG_CURRENT_DESKTOP" != "GNOME" ]; then
-        printMsg "Error: GNOME is not the current desktop environment."
-        printMsg "This package is only compatible with GNOME."
-        exit 1
-    fi
-}
-
-# Function executed after package installation
-post_install() {
-
-    printMsg "Changing permissions..."
-
-    #chown root:root "/usr/share/Nordic-cursors.tar.zst"
-    #chown root:root "/usr/share/Dracula-Icons.tar.zst"
-    #chown root:root "/usr/share/dracula.avif"
-
-    printMsg "Extracting theme and icon files..."
-
-    #tar -I zstd -xf "/usr/share/Nordic-cursors.tar.zst" -C /usr/share/icons
-    #tar -I zstd -xf "/usr/share/Dracula-Icons.tar.zst" -C /usr/share/icons
-    #cp -f "/usr/share/dracula.avif" /usr/share/wallpapers/
-
-    printMsg "Extraction completed"
-
-    printMsg "Removing temporary files..."
-    
-    #rm -f "/usr/share/Nordic-cursors.tar.zst"
-    #rm -f "/usr/share/Dracula-Icons.tar.zst"
-    #rm -f "/usr/share/dracula.avif"
-
-    printMsg "Applying Dracula theme for GNOME and configuring GTK..."
-
-    user=$(logname)
-    user_home=$(getent passwd "$user" | cut -d: -f6)
-    backup_file="$user_home/.config/gnome-settings-backup.txt"
-
-    if [ -z "$user_home" ]; then
-        printMsg "Could not determine the home directory for user $user. Skipping theme application."
-        return
-    fi
-
-    # Backup current GNOME settings
-    printMsg "Backing up current GNOME settings to $backup_file..."
-    su - "$user" -c "
-        export DISPLAY=:0;
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-        {
-            echo org.gnome.desktop.interface cursor-theme \$(gsettings get org.gnome.desktop.interface cursor-theme);
-            echo org.gnome.desktop.interface icon-theme \$(gsettings get org.gnome.desktop.interface icon-theme);
-            echo org.gnome.shell.extensions.user-theme name \$(gsettings get org.gnome.shell.extensions.user-theme name);
-            echo org.gnome.desktop.interface gtk-theme \$(gsettings get org.gnome.desktop.interface gtk-theme);
-            echo org.gnome.desktop.background picture-uri-dark \$(gsettings get org.gnome.desktop.background picture-uri-dark);
-            echo org.gnome.desktop.background picture-uri \$(gsettings get org.gnome.desktop.background picture-uri);
-        } > \"$backup_file\"
-    "
-
-    # Directories
-    GTK4_DIR="$user_home/.config/gtk-4.0"
-    GTK3_DIR="$user_home/.config/gtk-3.0"
-    THEMES_DIR="/usr/share/themes"
-    TMP_DIR="/tmp/Dracula"
-    REPO_URL="https://github.com/dracula/gtk.git"
-
-    # Backup and update GTK configurations
-    for dir in "$GTK4_DIR" "$GTK3_DIR"; do
-        if [ -d "$dir" ]; then
-            mkdir -p "$user_home/backup_customizations"
-            tar -czf "$user_home/backup_customizations/$(basename "$dir")-$(date +%Y%m%d%H%M%S).tar.gz" -C "$(dirname "$dir")" "$(basename "$dir")"
-        else
-            mkdir -p "$dir"
-        fi
-        # Set correct ownership for GTK directories
-        chown -R "$user:$user" "$dir"      
-    done
-    
-    printMsg "Cloning Dracula repository..."
-    git clone --depth=1 "$REPO_URL" "$TMP_DIR"
-
-    if [ $? -ne 0 ]; then
-        printMsg "Failed to clone Dracula repository"
-        return 1
-    fi
-
-    mkdir -p $THEMES_DIR/Dracula
-    cp -r "$TMP_DIR/"* $THEMES_DIR/Dracula/
-    chown -R root:root $THEMES_DIR/Dracula/
-    rm -rf "$TMP_DIR"
-
-    # Copy files and set ownership
-    cp -rp "$THEMES_DIR/Dracula/gtk-4.0/"* "$GTK4_DIR/"
-    cp -rp "$THEMES_DIR/Dracula/gtk-3.0/"* "$GTK3_DIR/"
-
-    chown -R root:root $THEMES_DIR/Dracula
-    chown -R "$user:$user" "$GTK4_DIR"
-    chown -R "$user:$user" "$GTK3_DIR"
-    chown -R "$user:$user" "$user_home/backup_customizations"    
-
-    # Update icon cache
-    printMsg "Updating icon cache for Dracula-Icons..."
-    gtk-update-icon-cache -f /usr/share/icons/Dracula-Icons
-    if [ $? -ne 0 ]; then
-        printMsg "Error: Failed to update icon cache."
-        return 1
-    fi
-    sleep 3
-
-    # Apply GNOME settings
-    printMsg "Applying GNOME settings for user $user..."
-    su - "$user" -c "
-        export DISPLAY=:0;
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-        gsettings set org.gnome.desktop.interface cursor-theme 'Nordic-cursors';
-        gsettings set org.gnome.desktop.interface icon-theme 'Dracula-Icons';
-        gsettings set org.gnome.shell.extensions.user-theme name 'Dracula';
-        gsettings set org.gnome.desktop.interface gtk-theme 'Dracula';
-        gsettings set org.gnome.desktop.background picture-uri-dark 'file:///usr/share/wallpapers/dracula.avif';
-        gsettings set org.gnome.desktop.background picture-uri 'file:///usr/share/wallpapers/dracula.avif';
-    "
-
-    # Verify if settings were applied
-    printMsg "Verifying GNOME settings..."
-    su - "$user" -c "
-        export DISPLAY=:0;
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-        echo 'Cursor Theme:' \$(gsettings get org.gnome.desktop.interface cursor-theme);
-        echo 'Icon Theme:' \$(gsettings get org.gnome.desktop.interface icon-theme);
-    "
-
-    printMsg "Dracula theme applied successfully!"
-}
-
-# Function executed before package removal
-pre_remove() {
-    printMsg "Preparing to remove Dracula theme..."
-}
-
-# Function executed after package removal
-
-post_remove() {
-    printMsg "Restoring default GNOME settings and removing Dracula theme files..."
-
-    user=$(logname)
-    user_home=$(getent passwd "$user" | cut -d: -f6)
-    backup_dir="$user_home/backup_customizations"
-    gtk4_backup_pattern="gtk-4.0-*.tar.gz"
-    gtk3_backup_pattern="gtk-3.0-*.tar.gz"
-    GTK4_DIR="$user_home/.config/gtk-4.0"
-    GTK3_DIR="$user_home/.config/gtk-3.0"
-    THEMES_DIR="/usr/share/themes/Dracula"
-    ICONS_DIR="/usr/share/icons/Dracula-Icons"
-    WALLPAPER_FILE="/usr/share/wallpapers/dracula.avif"
-    backup_file="$user_home/.config/gnome-settings-backup.txt"
-
-    # Verify if the user's home directory exists
-    if [ -z "$user_home" ]; then
-        printMsg "Could not determine the home directory for user $user. Skipping restoration."
-        return
-    fi
-
-    # Restore GNOME settings
-    if [ -f "$backup_file" ]; then
-        printMsg "Restoring GNOME settings from $backup_file..."
-        while IFS= read -r line; do
-            schema=$(echo "$line" | awk '{print $1}')
-            key=$(echo "$line" | awk '{print $2}')
-            value=$(echo "$line" | cut -d' ' -f3-)
-
-            su - "$user" -c "
-                export DISPLAY=:0;
-                export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-                gsettings set $schema $key $value
-            "
-        done < "$backup_file"
-        rm "$backup_file"
-    else
-        printMsg "No GNOME settings backup found. Skipping restoration."
-    fi
-
-    # Remove current GTK directories
-    printMsg "Removing current GTK directories..."
-    for dir in "$GTK4_DIR" "$GTK3_DIR"; do
-        if [ -d "$dir" ]; then
-            rm -rf "$dir"
-            printMsg "Removed: $dir"
-        fi
-    done
-
-    # Restore backups
-    printMsg "Restoring GTK directories from backups..."
-    if [ -d "$backup_dir" ]; then
-        for backup_file in "$backup_dir"/$gtk4_backup_pattern "$backup_dir"/$gtk3_backup_pattern; do
-            if [ -f "$backup_file" ]; then
-                printMsg "Restoring $backup_file..."
-                tar -xzf "$backup_file" -C "$user_home/.config/"
-                printMsg "Restored: $(basename "$backup_file")"
-            fi
-        done
-    else
-        printMsg "Backup directory $backup_dir not found. Skipping restoration."
-    fi
-
-    # Remove theme directory
-    if [ -d "$THEMES_DIR" ]; then
-        printMsg "Removing theme directory: $THEMES_DIR"
-        rm -rf "$THEMES_DIR"
-    else
-        printMsg "Theme directory not found: $THEMES_DIR"
-    fi
-
-    # Remove icons directory
-    if [ -d "$ICONS_DIR" ]; then
-        printMsg "Removing icons directory: $ICONS_DIR"
-        rm -rf "$ICONS_DIR"
-    else
-        printMsg "Icons directory not found: $ICONS_DIR"
-    fi
-
-    # Remove wallpaper file
-    if [ -f "$WALLPAPER_FILE" ]; then
-        printMsg "Removing wallpaper file: $WALLPAPER_FILE"
-        rm -f "$WALLPAPER_FILE"
-    else
-        printMsg "Wallpaper file not found: $WALLPAPER_FILE"
-    fi
-
-    printMsg "Default GNOME settings restored and all Dracula theme files removed."
-}
-
-post_upgrade() {
-    printMsg "Reapplying configuration after upgrade..."
-    post_install
-}
+### Installation file for Arch Linux packages
+##
+### Color definitions for status messages
+##blueDark="\e[1;38;5;33m"     # Bold dark blue
+##mediumBlue="\e[1;38;5;32m"   # Bold medium blue
+##lightBlue="\e[1;38;5;39m"    # Bold light blue
+##cyan="\e[1;38;5;45m"         # Bold cyan
+##white="\e[1;97m"             # Bold white
+##reset="\e[0m"                # Reset text formatting
+##
+### Print status messages - CHANGE 'PACKAGE_NAME' to your actual package name
+##printMsg() {
+##    local message=$1
+##    echo -e "${blueDark}[${lightBlue}comm-gnome-theme-dracula${blueDark}]${reset} ${cyan}→${reset} ${white}${message}${reset}"
+##}
+##
+### Function executed before package installation
+##pre_install() {
+##    printMsg "Preparing to install Dracula theme for GNOME..."
+##
+##    # Check if GNOME is in use
+##    if [ "$XDG_CURRENT_DESKTOP" != "GNOME" ]; then
+##        printMsg "Error: GNOME is not the current desktop environment."
+##        printMsg "This package is only compatible with GNOME."
+##        exit 1
+##    fi
+##}
+##
+### Function executed after package installation
+##post_install() {
+##
+##    printMsg "Changing permissions..."
+##
+##    #chown root:root "/usr/share/Nordic-cursors.tar.zst"
+##    #chown root:root "/usr/share/Dracula-Icons.tar.zst"
+##    #chown root:root "/usr/share/dracula.avif"
+##
+##    printMsg "Extracting theme and icon files..."
+##
+##    #tar -I zstd -xf "/usr/share/Nordic-cursors.tar.zst" -C /usr/share/icons
+##    #tar -I zstd -xf "/usr/share/Dracula-Icons.tar.zst" -C /usr/share/icons
+##    #cp -f "/usr/share/dracula.avif" /usr/share/wallpapers/
+##
+##    printMsg "Extraction completed"
+##
+##    printMsg "Removing temporary files..."
+##    
+##    #rm -f "/usr/share/Nordic-cursors.tar.zst"
+##    #rm -f "/usr/share/Dracula-Icons.tar.zst"
+##    #rm -f "/usr/share/dracula.avif"
+##
+##    printMsg "Applying Dracula theme for GNOME and configuring GTK..."
+##
+##    user=$(logname)
+##    user_home=$(getent passwd "$user" | cut -d: -f6)
+##    backup_file="$user_home/.config/gnome-settings-backup.txt"
+##
+##    if [ -z "$user_home" ]; then
+##        printMsg "Could not determine the home directory for user $user. Skipping theme application."
+##        return
+##    fi
+##
+##    # Backup current GNOME settings
+##    printMsg "Backing up current GNOME settings to $backup_file..."
+##    su - "$user" -c "
+##        export DISPLAY=:0;
+##        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
+##        {
+##            echo org.gnome.desktop.interface cursor-theme \$(gsettings get org.gnome.desktop.interface cursor-theme);
+##            echo org.gnome.desktop.interface icon-theme \$(gsettings get org.gnome.desktop.interface icon-theme);
+##            echo org.gnome.shell.extensions.user-theme name \$(gsettings get org.gnome.shell.extensions.user-theme name);
+##            echo org.gnome.desktop.interface gtk-theme \$(gsettings get org.gnome.desktop.interface gtk-theme);
+##            echo org.gnome.desktop.background picture-uri-dark \$(gsettings get org.gnome.desktop.background picture-uri-dark);
+##            echo org.gnome.desktop.background picture-uri \$(gsettings get org.gnome.desktop.background picture-uri);
+##        } > \"$backup_file\"
+##    "
+##
+##    # Directories
+##    GTK4_DIR="$user_home/.config/gtk-4.0"
+##    GTK3_DIR="$user_home/.config/gtk-3.0"
+##    THEMES_DIR="/usr/share/themes"
+##    TMP_DIR="/tmp/Dracula"
+##    REPO_URL="https://github.com/dracula/gtk.git"
+##
+##    # Backup and update GTK configurations
+##    for dir in "$GTK4_DIR" "$GTK3_DIR"; do
+##        if [ -d "$dir" ]; then
+##            mkdir -p "$user_home/backup_customizations"
+##            tar -czf "$user_home/backup_customizations/$(basename "$dir")-$(date +%Y%m%d%H%M%S).tar.gz" -C "$(dirname "$dir")" "$(basename "$dir")"
+##        else
+##            mkdir -p "$dir"
+##        fi
+##        # Set correct ownership for GTK directories
+##        chown -R "$user:$user" "$dir"      
+##    done
+##    
+##    printMsg "Cloning Dracula repository..."
+##    git clone --depth=1 "$REPO_URL" "$TMP_DIR"
+##
+##    if [ $? -ne 0 ]; then
+##        printMsg "Failed to clone Dracula repository"
+##        return 1
+##    fi
+##
+##    mkdir -p $THEMES_DIR/Dracula
+##    cp -r "$TMP_DIR/"* $THEMES_DIR/Dracula/
+##    chown -R root:root $THEMES_DIR/Dracula/
+##    rm -rf "$TMP_DIR"
+##
+##    # Copy files and set ownership
+##    cp -rp "$THEMES_DIR/Dracula/gtk-4.0/"* "$GTK4_DIR/"
+##    cp -rp "$THEMES_DIR/Dracula/gtk-3.0/"* "$GTK3_DIR/"
+##
+##    chown -R root:root $THEMES_DIR/Dracula
+##    chown -R "$user:$user" "$GTK4_DIR"
+##    chown -R "$user:$user" "$GTK3_DIR"
+##    chown -R "$user:$user" "$user_home/backup_customizations"    
+##
+##    # Update icon cache
+##    printMsg "Updating icon cache for Dracula-Icons..."
+##    gtk-update-icon-cache -f /usr/share/icons/Dracula-Icons
+##    if [ $? -ne 0 ]; then
+##        printMsg "Error: Failed to update icon cache."
+##        return 1
+##    fi
+##    sleep 3
+##
+##    # Apply GNOME settings
+##    printMsg "Applying GNOME settings for user $user..."
+##    su - "$user" -c "
+##        export DISPLAY=:0;
+##        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
+##        gsettings set org.gnome.desktop.interface cursor-theme 'Nordic-cursors';
+##        gsettings set org.gnome.desktop.interface icon-theme 'Dracula-Icons';
+##        gsettings set org.gnome.shell.extensions.user-theme name 'Dracula';
+##        gsettings set org.gnome.desktop.interface gtk-theme 'Dracula';
+##        gsettings set org.gnome.desktop.background picture-uri-dark 'file:///usr/share/wallpapers/dracula.avif';
+##        gsettings set org.gnome.desktop.background picture-uri 'file:///usr/share/wallpapers/dracula.avif';
+##    "
+##
+##    # Verify if settings were applied
+##    printMsg "Verifying GNOME settings..."
+##    su - "$user" -c "
+##        export DISPLAY=:0;
+##        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
+##        echo 'Cursor Theme:' \$(gsettings get org.gnome.desktop.interface cursor-theme);
+##        echo 'Icon Theme:' \$(gsettings get org.gnome.desktop.interface icon-theme);
+##    "
+##
+##    printMsg "Dracula theme applied successfully!"
+##}
+##
+### Function executed before package removal
+##pre_remove() {
+##    printMsg "Preparing to remove Dracula theme..."
+##}
+##
+### Function executed after package removal
+##
+##post_remove() {
+##    printMsg "Restoring default GNOME settings and removing Dracula theme files..."
+##
+##    user=$(logname)
+##    user_home=$(getent passwd "$user" | cut -d: -f6)
+##    backup_dir="$user_home/backup_customizations"
+##    gtk4_backup_pattern="gtk-4.0-*.tar.gz"
+##    gtk3_backup_pattern="gtk-3.0-*.tar.gz"
+##    GTK4_DIR="$user_home/.config/gtk-4.0"
+##    GTK3_DIR="$user_home/.config/gtk-3.0"
+##    THEMES_DIR="/usr/share/themes/Dracula"
+##    ICONS_DIR="/usr/share/icons/Dracula-Icons"
+##    WALLPAPER_FILE="/usr/share/wallpapers/dracula.avif"
+##    backup_file="$user_home/.config/gnome-settings-backup.txt"
+##
+##    # Verify if the user's home directory exists
+##    if [ -z "$user_home" ]; then
+##        printMsg "Could not determine the home directory for user $user. Skipping restoration."
+##        return
+##    fi
+##
+##    # Restore GNOME settings
+##    if [ -f "$backup_file" ]; then
+##        printMsg "Restoring GNOME settings from $backup_file..."
+##        while IFS= read -r line; do
+##            schema=$(echo "$line" | awk '{print $1}')
+##            key=$(echo "$line" | awk '{print $2}')
+##            value=$(echo "$line" | cut -d' ' -f3-)
+##
+##            su - "$user" -c "
+##                export DISPLAY=:0;
+##                export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
+##                gsettings set $schema $key $value
+##            "
+##        done < "$backup_file"
+##        rm "$backup_file"
+##    else
+##        printMsg "No GNOME settings backup found. Skipping restoration."
+##    fi
+##
+##    # Remove current GTK directories
+##    printMsg "Removing current GTK directories..."
+##    for dir in "$GTK4_DIR" "$GTK3_DIR"; do
+##        if [ -d "$dir" ]; then
+##            rm -rf "$dir"
+##            printMsg "Removed: $dir"
+##        fi
+##    done
+##
+##    # Restore backups
+##    printMsg "Restoring GTK directories from backups..."
+##    if [ -d "$backup_dir" ]; then
+##        for backup_file in "$backup_dir"/$gtk4_backup_pattern "$backup_dir"/$gtk3_backup_pattern; do
+##            if [ -f "$backup_file" ]; then
+##                printMsg "Restoring $backup_file..."
+##                tar -xzf "$backup_file" -C "$user_home/.config/"
+##                printMsg "Restored: $(basename "$backup_file")"
+##            fi
+##        done
+##    else
+##        printMsg "Backup directory $backup_dir not found. Skipping restoration."
+##    fi
+##
+##    # Remove theme directory
+##    if [ -d "$THEMES_DIR" ]; then
+##        printMsg "Removing theme directory: $THEMES_DIR"
+##        rm -rf "$THEMES_DIR"
+##    else
+##        printMsg "Theme directory not found: $THEMES_DIR"
+##    fi
+##
+##    # Remove icons directory
+##    if [ -d "$ICONS_DIR" ]; then
+##        printMsg "Removing icons directory: $ICONS_DIR"
+##        rm -rf "$ICONS_DIR"
+##    else
+##        printMsg "Icons directory not found: $ICONS_DIR"
+##    fi
+##
+##    # Remove wallpaper file
+##    if [ -f "$WALLPAPER_FILE" ]; then
+##        printMsg "Removing wallpaper file: $WALLPAPER_FILE"
+##        rm -f "$WALLPAPER_FILE"
+##    else
+##        printMsg "Wallpaper file not found: $WALLPAPER_FILE"
+##    fi
+##
+##    printMsg "Default GNOME settings restored and all Dracula theme files removed."
+##}
+##
+##post_upgrade() {
+##    printMsg "Reapplying configuration after upgrade..."
+##    post_install
+##}

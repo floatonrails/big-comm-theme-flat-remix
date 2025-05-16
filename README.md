@@ -13,7 +13,9 @@ This package is designed for Arch Linux and derivatives.
 
 ### 🎨 Screenshot:
 
+![alt text](image.png)
 
+![alt text](image-1.png)
 
 ---
 ## Features

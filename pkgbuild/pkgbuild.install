@@ -110,6 +110,7 @@ post_install() {
     # Copy files and set ownership
     cp -rp "$THEMES_DIR/Dracula/gtk-4.0/"* "$GTK4_DIR/"
     cp -rp "$THEMES_DIR/Dracula/gtk-3.0/"* "$GTK3_DIR/"
+    cp -rp "$THEMES_DIR/Dracula/assets/"* "$user_home/.config/gtk-3.0"
 
     chown -R root:root $THEMES_DIR/Dracula
     chown -R "$user:$user" "$GTK4_DIR"
@@ -147,6 +148,11 @@ post_install() {
         echo 'Icon Theme:' \$(gsettings get org.gnome.desktop.interface icon-theme);
     "
 
+    # Create symbolic link in user's .config directory pointing to assets
+    printMsg "Creating symbolic link for assets in $user_home/.config..."
+    ln -sf "$THEMES_DIR/Dracula-Theme/assets" "$user_home/.config/assets"
+    chown -h "$user:$user" "$user_home/.config/assets"
+
     printMsg "Dracula theme applied successfully!"
 }
 
@@ -158,6 +164,7 @@ pre_remove() {
 # Function executed after package removal
 
 post_remove() {
+
     printMsg "Restoring default GNOME settings and removing Dracula theme files..."
 
     user=$(logname)
@@ -242,6 +249,14 @@ post_remove() {
         rm -f "$WALLPAPER_FILE"
     else
         printMsg "Wallpaper file not found: $WALLPAPER_FILE"
+    fi
+
+    # Remove symbolic link assets
+    if [ -L "$user_home/.config/assets" ]; then
+        printMsg "Removing symbolic link: $user_home/.config/assets"
+        rm "$user_home/.config/assets"
+    else
+        printMsg "Symbolic link not found: $user_home/.config/assets"
     fi
 
     printMsg "Default GNOME settings restored and all Dracula theme files removed."

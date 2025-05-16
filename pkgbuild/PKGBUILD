@@ -7,7 +7,6 @@ pkgrel=$(date +%H%M)
 arch=('any')
 url="https://github.com/big-comm/${pkgname}"
 license=('MIT')
-#source=("Nordic-cursors.tar.zst" "Tokyonight-Dark-Icons.tar.zst" "Tokyonight-Dark-Theme.tar.zst" "tokyonight1.avif")
 source=("git+https://github.com/big-comm/${pkgname}.git")
 md5sums=('SKIP')
 install="pkgbuild.install"
@@ -22,29 +21,20 @@ fi
 package() {
     cd "${srcdir}/${pkgname}"
 
-    # Determine the correct source directory
-    if [ -d "${pkgname}" ]; then
-        srcdir="${srcdir}/${pkgname}/${pkgname}"
-    else
-        srcdir="${srcdir}/${pkgname}"
-    fi
-
-    # Install files
     local dirs=("usr" "etc" "opt")
     for dir in "${dirs[@]}"; do
-        if [ -d "${srcdir}/${dir}" ]; then
-            cp -a "${srcdir}/${dir}" "${pkgdir}/"
+        if [ -d "${dir}" ]; then
+            cp -a "${dir}" "${pkgdir}/"
         fi
     done
 
-    # Install license file if present
+    # Instala o LICENSE
     if [ -f "LICENSE" ]; then
         install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
     fi
 
-    # Install documentation if present
+    # Instala o README.md
     if [ -f "README.md" ]; then
         install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
     fi
-    
 }

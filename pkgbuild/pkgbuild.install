@@ -31,15 +31,15 @@ post_install() {
 
     printMsg "Changing permissions..."
 
-    chown root:root "/usr/share/Nordic-cursors.tar.zst"
-    chown root:root "/usr/share/Dracula-Icons.tar.zst"
-    chown root:root "/usr/share/dracula.avif"
+    #chown root:root "/usr/share/Nordic-cursors.tar.zst"
+    #chown root:root "/usr/share/Dracula-Icons.tar.zst"
+    #chown root:root "/usr/share/dracula.avif"
 
     printMsg "Extracting theme and icon files..."
 
-    tar -I zstd -xf "/usr/share/Nordic-cursors.tar.zst" -C /usr/share/icons
-    tar -I zstd -xf "/usr/share/Dracula-Icons.tar.zst" -C /usr/share/icons
-    cp -f "/usr/share/dracula.avif" /usr/share/wallpapers/
+    #tar -I zstd -xf "/usr/share/Nordic-cursors.tar.zst" -C /usr/share/icons
+    #tar -I zstd -xf "/usr/share/Dracula-Icons.tar.zst" -C /usr/share/icons
+    #cp -f "/usr/share/dracula.avif" /usr/share/wallpapers/
 
     printMsg "Extraction completed"
 
@@ -169,7 +169,7 @@ post_remove() {
     GTK3_DIR="$user_home/.config/gtk-3.0"
     THEMES_DIR="/usr/share/themes/Dracula"
     ICONS_DIR="/usr/share/icons/Dracula-Icons"
-    WALLPAPER_FILE="/usr/share/wallpapers/tokyonight1.avif"
+    WALLPAPER_FILE="/usr/share/wallpapers/dracula.avif"
     backup_file="$user_home/.config/gnome-settings-backup.txt"
 
     # Verify if the user's home directory exists

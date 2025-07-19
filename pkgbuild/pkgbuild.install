@@ -1,268 +1,130 @@
-# Installation file for Arch Linux packages
+# Cores Flat Remix
+darkBlue="\e[1;38;5;25m"
+lightAccent="\e[1;38;5;81m"
+fgWhite="\e[1;97m"
+reset="\e[0m"
 
-# Color definitions for status messages
-blueDark="\e[1;38;5;33m"     # Bold dark blue
-mediumBlue="\e[1;38;5;32m"   # Bold medium blue
-lightBlue="\e[1;38;5;39m"    # Bold light blue
-cyan="\e[1;38;5;45m"         # Bold cyan
-white="\e[1;97m"             # Bold white
-reset="\e[0m"                # Reset text formatting
-
-# Print status messages - CHANGE 'PACKAGE_NAME' to your actual package name
 printMsg() {
-    local message=$1
-    echo -e "${blueDark}[${lightBlue}comm-gnome-theme-dracula${blueDark}]${reset} ${cyan}→${reset} ${white}${message}${reset}"
+    local msg=$1
+    echo -e "${darkBlue}[${lightAccent}Flat-Remix-Installer${darkBlue}]${reset} ${fgWhite}${msg}${reset}"
 }
 
-# Function executed before package installation
-pre_install() {
-    printMsg "Preparing to install Dracula theme for GNOME..."
+detect_environment() {
+    case "$XDG_CURRENT_DESKTOP" in
+        GNOME|X-Cinnamon|XFCE)
+            printMsg "Detected desktop environment: $XDG_CURRENT_DESKTOP"
+            ;;
+        *)
+            printMsg "Error: Unsupported desktop environment: $XDG_CURRENT_DESKTOP"
+            exit 1
+            ;;
+    esac
+}
 
-    # Check if GNOME is in use
-    if [ "$XDG_CURRENT_DESKTOP" != "GNOME" ]; then
-        printMsg "Error: GNOME is not the current desktop environment."
-        printMsg "This package is only compatible with GNOME."
-        exit 1
+set_cursor() {
+    if fc-list | grep -q 'Adwaita'; then
+        CURSOR="Adwaita"
+    else
+        CURSOR="Bibata-Modern-Classic"
     fi
+    printMsg "Using cursor: $CURSOR"
 }
 
-# Function executed after package installation
+pre_install() {
+    printMsg "Preparing to install Flat-Remix theme..."
+    detect_environment
+    set_cursor
+}
+
 post_install() {
-
-    printMsg "Changing permissions..."
-
-    chown root:root "/usr/share/Nordic-cursors.tar.zst"
-    chown root:root "/usr/share/Dracula-Icons.tar.zst"
-    chown root:root "/usr/share/dracula.avif"
-
-    printMsg "Extracting theme and icon files..."
-
-    tar -I zstd -xf "/usr/share/Nordic-cursors.tar.zst" -C /usr/share/icons
-    tar -I zstd -xf "/usr/share/Dracula-Icons.tar.zst" -C /usr/share/icons
-    cp -f "/usr/share/dracula.avif" /usr/share/wallpapers/
-
-    printMsg "Extraction completed"
-
-    printMsg "Removing temporary files..."
-    
-    rm -f "/usr/share/Nordic-cursors.tar.zst"
-    rm -f "/usr/share/Dracula-Icons.tar.zst"
-    rm -f "/usr/share/dracula.avif"
-
-    printMsg "Applying Dracula theme for GNOME and configuring GTK..."
-
     user=$(logname)
     user_home=$(getent passwd "$user" | cut -d: -f6)
-    backup_file="$user_home/.config/gnome-settings-backup.txt"
 
-    if [ -z "$user_home" ]; then
-        printMsg "Could not determine the home directory for user $user. Skipping theme application."
-        return
+    THEME_ARCHIVE="/usr/share/Flat-Remix-GTK-Blue-Dark.tar.zst"
+    ICON_ARCHIVE="/usr/share/Flat-Remix-Icons.tar.zst"
+    CURSOR_THEME="$CURSOR"
+    WALLPAPER="/usr/share/flat-remix-wallpaper.avif"
+
+    printMsg "Extracting theme, icons, and wallpaper..."
+    tar -I zstd -xf "$THEME_ARCHIVE" -C /usr/share/themes/
+    tar -I zstd -xf "$ICON_ARCHIVE" -C /usr/share/icons/
+    cp -f "$WALLPAPER" /usr/share/wallpapers/
+
+    # Mover libadwaita para GTK4 config
+    mkdir -p "$user_home/.config/gtk-4.0"
+    cp -r /usr/share/themes/Flat-Remix-GTK-Blue-Dark/libadwaita/* "$user_home/.config/gtk-4.0/"
+    chown -R "$user:$user" "$user_home/.config/gtk-4.0"
+
+    printMsg "Applying settings for $XDG_CURRENT_DESKTOP..."
+
+    if [ "$XDG_CURRENT_DESKTOP" == "GNOME" ]; then
+        su - "$user" -c "
+            export DISPLAY=:0;
+            export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
+            gsettings set org.gnome.desktop.interface cursor-theme '$CURSOR_THEME';
+            gsettings set org.gnome.desktop.interface icon-theme 'Flat-Remix-Icons';
+            gsettings set org.gnome.desktop.interface gtk-theme 'Flat-Remix-GTK';
+            gsettings set org.gnome.desktop.background picture-uri 'file://$WALLPAPER';
+            gsettings set org.gnome.desktop.background picture-uri-dark 'file://$WALLPAPER';
+            gsettings set org.gnome.shell.extensions.user-theme name 'Flat-Remix-GTK';
+        "
+    elif [ "$XDG_CURRENT_DESKTOP" == "X-Cinnamon" ]; then
+        gsettings set org.cinnamon.desktop.interface gtk-theme 'Flat-Remix-GTK'
+        gsettings set org.cinnamon.desktop.interface icon-theme 'Flat-Remix-Icons'
+    elif [ "$XDG_CURRENT_DESKTOP" == "XFCE" ]; then
+        xfconf-query -c xsettings -p /Net/IconThemeName -s "Flat-Remix-Icons"
+        xfconf-query -c xsettings -p /Net/ThemeName -s "Flat-Remix-GTK"
     fi
 
-    # Backup current GNOME settings
-    printMsg "Backing up current GNOME settings to $backup_file..."
-    su - "$user" -c "
-        export DISPLAY=:0;
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-        {
-            echo org.gnome.desktop.interface cursor-theme \$(gsettings get org.gnome.desktop.interface cursor-theme);
-            echo org.gnome.desktop.interface icon-theme \$(gsettings get org.gnome.desktop.interface icon-theme);
-            echo org.gnome.shell.extensions.user-theme name \$(gsettings get org.gnome.shell.extensions.user-theme name);
-            echo org.gnome.desktop.interface gtk-theme \$(gsettings get org.gnome.desktop.interface gtk-theme);
-            echo org.gnome.desktop.background picture-uri-dark \$(gsettings get org.gnome.desktop.background picture-uri-dark);
-            echo org.gnome.desktop.background picture-uri \$(gsettings get org.gnome.desktop.background picture-uri);
-        } > \"$backup_file\"
-    "
-
-    # Directories
-    GTK4_DIR="$user_home/.config/gtk-4.0"
-    GTK3_DIR="$user_home/.config/gtk-3.0"
-    THEMES_DIR="/usr/share/themes"
-    TMP_DIR="/tmp/Dracula"
-    REPO_URL="https://github.com/dracula/gtk.git"
-
-    # Backup and update GTK configurations
-    for dir in "$GTK4_DIR" "$GTK3_DIR"; do
-        if [ -d "$dir" ]; then
-            mkdir -p "$user_home/backup_customizations"
-            tar -czf "$user_home/backup_customizations/$(basename "$dir")-$(date +%Y%m%d%H%M%S).tar.gz" -C "$(dirname "$dir")" "$(basename "$dir")"
-        else
-            mkdir -p "$dir"
-        fi
-        # Set correct ownership for GTK directories
-        chown -R "$user:$user" "$dir"      
-    done
-    
-    printMsg "Cloning Dracula repository..."
-    git clone --depth=1 "$REPO_URL" "$TMP_DIR"
-
-    if [ $? -ne 0 ]; then
-        printMsg "Failed to clone Dracula repository"
-        return 1
-    fi
-
-    mkdir -p $THEMES_DIR/Dracula
-    cp -r "$TMP_DIR/"* $THEMES_DIR/Dracula/
-    chown -R root:root $THEMES_DIR/Dracula/
-    rm -rf "$TMP_DIR"
-
-    # Copy files and set ownership
-    cp -rp "$THEMES_DIR/Dracula/gtk-4.0/"* "$GTK4_DIR/"
-    cp -rp "$THEMES_DIR/Dracula/gtk-3.0/"* "$GTK3_DIR/"
-    cp -rp "$THEMES_DIR/Dracula/assets/"* "$user_home/.config/gtk-3.0"
-
-    chown -R root:root $THEMES_DIR/Dracula
-    chown -R "$user:$user" "$GTK4_DIR"
-    chown -R "$user:$user" "$GTK3_DIR"
-    chown -R "$user:$user" "$user_home/backup_customizations"    
-
-    # Update icon cache
-    printMsg "Updating icon cache for Dracula-Icons..."
-    gtk-update-icon-cache -f /usr/share/icons/Dracula-Icons
-    if [ $? -ne 0 ]; then
-        printMsg "Error: Failed to update icon cache."
-        return 1
-    fi
-    sleep 3
-
-    # Apply GNOME settings
-    printMsg "Applying GNOME settings for user $user..."
-    su - "$user" -c "
-        export DISPLAY=:0;
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-        gsettings set org.gnome.desktop.interface cursor-theme 'Nordic-cursors';
-        gsettings set org.gnome.desktop.interface icon-theme 'Dracula-Icons';
-        gsettings set org.gnome.shell.extensions.user-theme name 'Dracula';
-        gsettings set org.gnome.desktop.interface gtk-theme 'Dracula';
-        gsettings set org.gnome.desktop.background picture-uri-dark 'file:///usr/share/wallpapers/dracula.avif';
-        gsettings set org.gnome.desktop.background picture-uri 'file:///usr/share/wallpapers/dracula.avif';
-    "
-
-    # Verify if settings were applied
-    printMsg "Verifying GNOME settings..."
-    su - "$user" -c "
-        export DISPLAY=:0;
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-        echo 'Cursor Theme:' \$(gsettings get org.gnome.desktop.interface cursor-theme);
-        echo 'Icon Theme:' \$(gsettings get org.gnome.desktop.interface icon-theme);
-    "
-
-    # Create symbolic link in user's .config directory pointing to assets
-    printMsg "Creating symbolic link for assets in $user_home/.config..."
-    ln -sf "$THEMES_DIR/Dracula/assets" "$user_home/.config/assets"
-    chown -h "$user:$user" "$user_home/.config/assets"
-
-    printMsg "Dracula theme applied successfully!"
+    printMsg "Flat-Remix theme applied successfully!"
 }
 
-# Function executed before package removal
 pre_remove() {
-    printMsg "Preparing to remove Dracula theme..."
+    printMsg "Preparing to remove Flat-Remix theme..."
 }
-
-# Function executed after package removal
 
 post_remove() {
-
-    printMsg "Restoring default GNOME settings and removing Dracula theme files..."
+    printMsg "Removing Flat-Remix files and restoring defaults..."
 
     user=$(logname)
     user_home=$(getent passwd "$user" | cut -d: -f6)
-    backup_dir="$user_home/backup_customizations"
-    gtk4_backup_pattern="gtk-4.0-*.tar.gz"
-    gtk3_backup_pattern="gtk-3.0-*.tar.gz"
+
+    # Diretórios e arquivos
     GTK4_DIR="$user_home/.config/gtk-4.0"
-    GTK3_DIR="$user_home/.config/gtk-3.0"
-    THEMES_DIR="/usr/share/themes/Dracula"
-    ICONS_DIR="/usr/share/icons/Dracula-Icons"
-    WALLPAPER_FILE="/usr/share/wallpapers/dracula.avif"
-    backup_file="$user_home/.config/gnome-settings-backup.txt"
+    THEME_DIR="/usr/share/themes/Flat-Remix-GTK-Blue-Dark"
+    ICONS_DIR="/usr/share/icons/Flat-Remix-Icons"
+    WALLPAPER="/usr/share/wallpapers/flat-remix-wallpaper.avif"
 
-    # Verify if the user's home directory exists
-    if [ -z "$user_home" ]; then
-        printMsg "Could not determine the home directory for user $user. Skipping restoration."
-        return
+    # Restaurar tema padrão
+    if [ "$XDG_CURRENT_DESKTOP" == "GNOME" ]; then
+        su - "$user" -c "
+            export DISPLAY=:0;
+            export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
+            gsettings reset org.gnome.desktop.interface cursor-theme
+            gsettings reset org.gnome.desktop.interface icon-theme
+            gsettings reset org.gnome.desktop.interface gtk-theme
+            gsettings reset org.gnome.desktop.background picture-uri
+            gsettings reset org.gnome.desktop.background picture-uri-dark
+            gsettings reset org.gnome.shell.extensions.user-theme name
+        "
+    elif [ "$XDG_CURRENT_DESKTOP" == "X-Cinnamon" ]; then
+        gsettings reset org.cinnamon.desktop.interface gtk-theme
+        gsettings reset org.cinnamon.desktop.interface icon-theme
+    elif [ "$XDG_CURRENT_DESKTOP" == "XFCE" ]; then
+        xfconf-query -c xsettings -p /Net/IconThemeName -r
+        xfconf-query -c xsettings -p /Net/ThemeName -r
     fi
 
-    # Restore GNOME settings
-    if [ -f "$backup_file" ]; then
-        printMsg "Restoring GNOME settings from $backup_file..."
-        while IFS= read -r line; do
-            schema=$(echo "$line" | awk '{print $1}')
-            key=$(echo "$line" | awk '{print $2}')
-            value=$(echo "$line" | cut -d' ' -f3-)
+    # Remover arquivos
+    rm -rf "$GTK4_DIR"
+    rm -rf "$THEME_DIR"
+    rm -rf "$ICONS_DIR"
+    rm -f "$WALLPAPER"
 
-            su - "$user" -c "
-                export DISPLAY=:0;
-                export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-                gsettings set $schema $key $value
-            "
-        done < "$backup_file"
-        rm "$backup_file"
-    else
-        printMsg "No GNOME settings backup found. Skipping restoration."
-    fi
-
-    # Remove current GTK directories
-    printMsg "Removing current GTK directories..."
-    for dir in "$GTK4_DIR" "$GTK3_DIR"; do
-        if [ -d "$dir" ]; then
-            rm -rf "$dir"
-            printMsg "Removed: $dir"
-        fi
-    done
-
-    # Restore backups
-    printMsg "Restoring GTK directories from backups..."
-    if [ -d "$backup_dir" ]; then
-        for backup_file in "$backup_dir"/$gtk4_backup_pattern "$backup_dir"/$gtk3_backup_pattern; do
-            if [ -f "$backup_file" ]; then
-                printMsg "Restoring $backup_file..."
-                tar -xzf "$backup_file" -C "$user_home/.config/"
-                printMsg "Restored: $(basename "$backup_file")"
-            fi
-        done
-    else
-        printMsg "Backup directory $backup_dir not found. Skipping restoration."
-    fi
-
-    # Remove theme directory
-    if [ -d "$THEMES_DIR" ]; then
-        printMsg "Removing theme directory: $THEMES_DIR"
-        rm -rf "$THEMES_DIR"
-    else
-        printMsg "Theme directory not found: $THEMES_DIR"
-    fi
-
-    # Remove icons directory
-    if [ -d "$ICONS_DIR" ]; then
-        printMsg "Removing icons directory: $ICONS_DIR"
-        rm -rf "$ICONS_DIR"
-    else
-        printMsg "Icons directory not found: $ICONS_DIR"
-    fi
-
-    # Remove wallpaper file
-    if [ -f "$WALLPAPER_FILE" ]; then
-        printMsg "Removing wallpaper file: $WALLPAPER_FILE"
-        rm -f "$WALLPAPER_FILE"
-    else
-        printMsg "Wallpaper file not found: $WALLPAPER_FILE"
-    fi
-
-    # Remove symbolic link assets
-    if [ -L "$user_home/.config/assets" ]; then
-        printMsg "Removing symbolic link: $user_home/.config/assets"
-        rm "$user_home/.config/assets"
-    else
-        printMsg "Symbolic link not found: $user_home/.config/assets"
-    fi
-
-    printMsg "Default GNOME settings restored and all Dracula theme files removed."
+    printMsg "Flat-Remix theme removed and system restored!"
 }
 
 post_upgrade() {
-    printMsg "Reapplying configuration after upgrade..."
+    printMsg "Reapplying Flat-Remix configuration after upgrade..."
     post_install
 }

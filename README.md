@@ -1,13 +1,13 @@
 # comm-gnome-theme-dracula
 
 
-Dracula is a sleek and modern GNOME theme that includes:
+Flat Remix is a material and colorful GNOME theme that includes:
 - A custom GTK theme
 - A matching icon set
-- Nordic-inspired cursor theme
+- Adwaita-inspired cursor theme
 - A stunning wallpaper to complete the look
 
-This package is designed for Arch Linux and derivatives.
+This package is designed for Arch Linux and derivatives and specially for BigCommunity.
 
 ---
 

@@ -1,12 +1,5 @@
-# Cores Flat Remix
-darkBlue="\e[1;38;5;25m"
-lightAccent="\e[1;38;5;81m"
-fgWhite="\e[1;97m"
-reset="\e[0m"
-
 printMsg() {
-    local msg=$1
-    echo -e "${darkBlue}[${lightAccent}Flat-Remix-Installer${darkBlue}]${reset} ${fgWhite}${msg}${reset}"
+    echo -e "\e[1;38;5;25m[\e[1;38;5;81mFlat-Remix-Installer\e[1;38;5;25m]\e[0m \e[1;97m$1\e[0m"
 }
 
 detect_environment() {
@@ -15,8 +8,8 @@ detect_environment() {
             printMsg "Detected desktop environment: $XDG_CURRENT_DESKTOP"
             ;;
         *)
-            printMsg "Error: Unsupported desktop environment: $XDG_CURRENT_DESKTOP"
-            exit 1
+            printMsg "Unknown environment — defaulting to XFCE"
+            XDG_CURRENT_DESKTOP="XFCE"
             ;;
     esac
 }
@@ -30,101 +23,137 @@ set_cursor() {
     printMsg "Using cursor: $CURSOR"
 }
 
-pre_install() {
-    printMsg "Preparing to install Flat-Remix theme..."
-    detect_environment
-    set_cursor
+backup_settings() {
+    user="$1"
+    home="$2"
+    backup="$home/.config/flat-remix-backup.txt"
+    printMsg "Backing up current settings to $backup..."
+
+    su - "$user" -c "
+        export DISPLAY=:0
+        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus
+        {
+            gsettings list-recursively org.gnome.desktop.interface
+            gsettings list-recursively org.gnome.desktop.background
+            gsettings list-recursively org.gnome.shell.extensions.user-theme
+        } > \"$backup\"
+    "
+}
+
+restore_settings() {
+    user="$1"
+    home="$2"
+    backup="$home/.config/flat-remix-backup.txt"
+
+    if [ -f "$backup" ]; then
+        printMsg "Restoring settings from backup..."
+        while IFS= read -r line; do
+            schema=$(echo "$line" | awk '{print $1}')
+            key=$(echo "$line" | awk '{print $2}')
+            value=$(echo "$line" | cut -d ' ' -f 3-)
+            su - "$user" -c "
+                export DISPLAY=:0
+                export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus
+                gsettings set $schema $key \"$value\"
+            "
+        done < "$backup"
+        rm "$backup"
+    fi
+}
+
+apply_wallpaper_xfce() {
+    user="$1"
+    home="$2"
+    wallpaper="/usr/share/wallpapers/Flat-Remix.jpg"
+
+    if command -v xfconf-query >/dev/null; then
+        printMsg "Applying wallpaper in XFCE..."
+        su - "$user" -c "
+            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -s \"$wallpaper\"
+            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-style -s 3
+            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-show -s true
+        "
+    fi
 }
 
 post_install() {
+    detect_environment
+    set_cursor
+
     user=$(logname)
-    user_home=$(getent passwd "$user" | cut -d: -f6)
+    home=$(getent passwd "$user" | cut -d: -f6)
+    wallpaper="/usr/share/wallpapers/Flat-Remix.jpg"
 
-    THEME_ARCHIVE="/usr/share/Flat-Remix-GTK-Blue-Dark.tar.zst"
-    ICON_ARCHIVE="/usr/share/Flat-Remix-Icons.tar.zst"
-    CURSOR_THEME="$CURSOR"
-    WALLPAPER="/usr/share/flat-remix-wallpaper.avif"
+    printMsg "Extracting theme and icons..."
+    tar --zstd -xf /usr/share/Flat-Remix-GTK.tar.zst -C /usr/share/themes/
+    tar --zstd -xf /usr/share/Flat-Remix-Icons.tar.zst -C /usr/share/icons/
 
-    printMsg "Extracting theme, icons, and wallpaper..."
-    tar -I zstd -xf "$THEME_ARCHIVE" -C /usr/share/themes/
-    tar -I zstd -xf "$ICON_ARCHIVE" -C /usr/share/icons/
-    cp -f "$WALLPAPER" /usr/share/wallpapers/
+    mkdir -p "$home/.config/gtk-4.0"
+    cp -r /usr/share/themes/Flat-Remix-GTK/libadwaita/* "$home/.config/gtk-4.0/"
+    chown -R "$user:$user" "$home/.config/gtk-4.0"
 
-    # Mover libadwaita para GTK4 config
-    mkdir -p "$user_home/.config/gtk-4.0"
-    cp -r /usr/share/themes/Flat-Remix-GTK-Blue-Dark/libadwaita/* "$user_home/.config/gtk-4.0/"
-    chown -R "$user:$user" "$user_home/.config/gtk-4.0"
-
-    printMsg "Applying settings for $XDG_CURRENT_DESKTOP..."
-
-    if [ "$XDG_CURRENT_DESKTOP" == "GNOME" ]; then
-        su - "$user" -c "
-            export DISPLAY=:0;
-            export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-            gsettings set org.gnome.desktop.interface cursor-theme '$CURSOR_THEME';
-            gsettings set org.gnome.desktop.interface icon-theme 'Flat-Remix-Icons';
-            gsettings set org.gnome.desktop.interface gtk-theme 'Flat-Remix-GTK';
-            gsettings set org.gnome.desktop.background picture-uri 'file://$WALLPAPER';
-            gsettings set org.gnome.desktop.background picture-uri-dark 'file://$WALLPAPER';
-            gsettings set org.gnome.shell.extensions.user-theme name 'Flat-Remix-GTK';
-        "
-    elif [ "$XDG_CURRENT_DESKTOP" == "X-Cinnamon" ]; then
-        gsettings set org.cinnamon.desktop.interface gtk-theme 'Flat-Remix-GTK'
-        gsettings set org.cinnamon.desktop.interface icon-theme 'Flat-Remix-Icons'
-    elif [ "$XDG_CURRENT_DESKTOP" == "XFCE" ]; then
-        xfconf-query -c xsettings -p /Net/IconThemeName -s "Flat-Remix-Icons"
-        xfconf-query -c xsettings -p /Net/ThemeName -s "Flat-Remix-GTK"
+    # GNOME Shell
+    if [ "$XDG_CURRENT_DESKTOP" = "GNOME" ] && [ -d "/usr/share/themes/Flat-Remix-GS" ]; then
+        printMsg "Installing Flat-Remix GNOME Shell theme..."
+        mkdir -p "$home/.themes/"
+        cp -r /usr/share/themes/Flat-Remix-GS "$home/.themes/"
+        chown -R "$user:$user" "$home/.themes/Flat-Remix-GS"
     fi
 
-    printMsg "Flat-Remix theme applied successfully!"
-}
+    backup_settings "$user" "$home"
 
-pre_remove() {
-    printMsg "Preparing to remove Flat-Remix theme..."
+    printMsg "Applying theme..."
+    case "$XDG_CURRENT_DESKTOP" in
+        GNOME)
+            su - "$user" -c "
+                export DISPLAY=:0
+                export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus
+                gsettings set org.gnome.desktop.interface cursor-theme '$CURSOR'
+                gsettings set org.gnome.desktop.interface icon-theme 'Flat-Remix-Icons'
+                gsettings set org.gnome.desktop.interface gtk-theme 'Flat-Remix-GTK'
+                gsettings set org.gnome.desktop.background picture-uri 'file://$wallpaper'
+                gsettings set org.gnome.desktop.background picture-uri-dark 'file://$wallpaper'
+                gsettings set org.gnome.shell.extensions.user-theme name 'Flat-Remix-GTK'
+            "
+            ;;
+        X-Cinnamon)
+            gsettings set org.cinnamon.desktop.interface cursor-theme "$CURSOR"
+            gsettings set org.cinnamon.desktop.interface icon-theme "Flat-Remix-Icons"
+            gsettings set org.cinnamon.desktop.interface gtk-theme "Flat-Remix-GTK"
+            gsettings set org.cinnamon.theme name "Flat-Remix-Cinnamon"
+            gsettings set org.cinnamon.desktop.background picture-uri "file://$wallpaper"
+            ;;
+        XFCE)
+            apply_wallpaper_xfce "$user" "$home"
+            xfconf-query -c xsettings -p /Net/IconThemeName -s "Flat-Remix-Icons"
+            xfconf-query -c xsettings -p /Net/ThemeName -s "Flat-Remix-GTK"
+            ;;
+    esac
+
+    printMsg "Flat-Remix theme applied!"
 }
 
 post_remove() {
-    printMsg "Removing Flat-Remix files and restoring defaults..."
-
     user=$(logname)
-    user_home=$(getent passwd "$user" | cut -d: -f6)
+    home=$(getent passwd "$user" | cut -d: -f6)
 
-    # Diretórios e arquivos
-    GTK4_DIR="$user_home/.config/gtk-4.0"
-    THEME_DIR="/usr/share/themes/Flat-Remix-GTK-Blue-Dark"
-    ICONS_DIR="/usr/share/icons/Flat-Remix-Icons"
-    WALLPAPER="/usr/share/wallpapers/flat-remix-wallpaper.avif"
+    printMsg "Removing Flat-Remix theme and restoring settings..."
+    restore_settings "$user" "$home"
 
-    # Restaurar tema padrão
-    if [ "$XDG_CURRENT_DESKTOP" == "GNOME" ]; then
+    rm -rf /usr/share/themes/Flat-Remix-GTK
+    rm -rf /usr/share/icons/Flat-Remix-Icons
+    rm -rf /usr/share/themes/Flat-Remix-Cinnamon
+    rm -rf /usr/share/themes/Flat-Remix-GS
+    rm -f /usr/share/wallpapers/Flat-Remix.jpg
+    rm -rf "$home/.themes/Flat-Remix-GS"
+    rm -rf "$home/.config/gtk-4.0"
+
+    # Revert wallpaper in XFCE
+    if [ "$XDG_CURRENT_DESKTOP" = "XFCE" ] && command -v xfconf-query >/dev/null; then
+        printMsg "Restoring XFCE wallpaper to system default..."
         su - "$user" -c "
-            export DISPLAY=:0;
-            export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus;
-            gsettings reset org.gnome.desktop.interface cursor-theme
-            gsettings reset org.gnome.desktop.interface icon-theme
-            gsettings reset org.gnome.desktop.interface gtk-theme
-            gsettings reset org.gnome.desktop.background picture-uri
-            gsettings reset org.gnome.desktop.background picture-uri-dark
-            gsettings reset org.gnome.shell.extensions.user-theme name
+            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -r
         "
-    elif [ "$XDG_CURRENT_DESKTOP" == "X-Cinnamon" ]; then
-        gsettings reset org.cinnamon.desktop.interface gtk-theme
-        gsettings reset org.cinnamon.desktop.interface icon-theme
-    elif [ "$XDG_CURRENT_DESKTOP" == "XFCE" ]; then
-        xfconf-query -c xsettings -p /Net/IconThemeName -r
-        xfconf-query -c xsettings -p /Net/ThemeName -r
     fi
 
-    # Remover arquivos
-    rm -rf "$GTK4_DIR"
-    rm -rf "$THEME_DIR"
-    rm -rf "$ICONS_DIR"
-    rm -f "$WALLPAPER"
-
-    printMsg "Flat-Remix theme removed and system restored!"
-}
-
-post_upgrade() {
-    printMsg "Reapplying Flat-Remix configuration after upgrade..."
-    post_install
-}
+    printMsg "Flat-Remix theme completely removed and system settings restored

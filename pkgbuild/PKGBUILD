@@ -1,146 +1,35 @@
-printMsg() {
-    echo -e "\e[1;38;5;25m[\e[1;38;5;81mFlat-Remix-Installer\e[1;38;5;25m]\e[0m \e[1;97m$1\e[0m"
-}
+# Maintainer: Leonardo Berbert <leo4berbert@gmail.com>
 
-detect_environment() {
-    case "$XDG_CURRENT_DESKTOP" in
-        GNOME|X-Cinnamon|XFCE)
-            printMsg "Detected desktop: $XDG_CURRENT_DESKTOP"
-            ;;
-        *)
-            printMsg "Desktop environment not recognized. Applying default fallback (XFCE)..."
-            XDG_CURRENT_DESKTOP="XFCE"
-            ;;
-    esac
-}
+pkgname=big-comm-theme-flat-remix
+pkgdesc="Flat Remix theme for GNOME, Cinnamon and XFCE, with icons, cursors, wallpaper and GNOME Shell style"
+pkgver=$(date +%y.%m.%d)
+pkgrel=$(date +%H%M)
+arch=('any')
+url="https://github.com/big-comm/${pkgname}"
+license=('MIT')
+source=("git+https://github.com/big-comm/${pkgname}.git")
+md5sums=('SKIP')
 
-set_cursor() {
-    if fc-list | grep -q 'Adwaita'; then
-        CURSOR="Adwaita"
-    else
-        CURSOR="Bibata-Modern-Classic"
-    fi
-    printMsg "Cursor selected: $CURSOR"
-}
+# Detect install script
+if [ -e "${pkgname}.install" ]; then
+    install="${pkgname}.install"
+elif [ -e "pkgbuild.install" ]; then
+    install="pkgbuild.install"
+fi
 
-backup_settings() {
-    local user="$1"
-    local user_home="$2"
-    local backup_file="$user_home/.config/flat-remix-backup-settings.txt"
+package() {
+    cd "${srcdir}/${pkgname}"
 
-    printMsg "Backing up user settings to $backup_file..."
-    su - "$user" -c "
-        export DISPLAY=:0
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus
-        {
-            gsettings list-recursively org.gnome.desktop.interface
-            gsettings list-recursively org.gnome.desktop.background
-            gsettings list-recursively org.gnome.shell.extensions.user-theme
-        } > \"$backup_file\"
-    "
-}
+    for dir in usr etc opt; do
+        if [ -d "$dir" ]; then
+            cp -a "$dir" "${pkgdir}/"
+        fi
+    done
 
-restore_settings() {
-    local user="$1"
-    local user_home="$2"
-    local backup_file="$user_home/.config/flat-remix-backup-settings.txt"
+    # Documentation and license
+    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
 
-    if [ -f "$backup_file" ]; then
-        printMsg "Restoring user settings from $backup_file..."
-        while IFS= read -r line; do
-            schema=$(echo "$line" | awk '{print $1}')
-            key=$(echo "$line" | awk '{print $2}')
-            value=$(echo "$line" | cut -d ' ' -f 3-)
-            su - "$user" -c "
-                export DISPLAY=:0
-                export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus
-                gsettings set $schema $key \"$value\"
-            "
-        done < "$backup_file"
-        rm "$backup_file"
-    else
-        printMsg "No previous backup found. Skipping restoration."
-    fi
-}
-
-post_install() {
-    detect_environment
-    set_cursor
-
-    local user=$(logname)
-    local user_home=$(getent passwd "$user" | cut -d: -f6)
-    local wallpaper="/usr/share/wallpapers/flat-remix-wallpaper.avif"
-
-    printMsg "Installing theme assets..."
-    tar --zstd -xf /usr/share/Flat-Remix-GTK.tar.zst -C /usr/share/themes/
-    tar --zstd -xf /usr/share/Flat-Remix-Icons.tar.zst -C /usr/share/icons/
-    cp -f "$wallpaper" /usr/share/wallpapers/
-
-    # GTK4 libadwaita assets
-    mkdir -p "$user_home/.config/gtk-4.0"
-    cp -r /usr/share/themes/Flat-Remix-GTK/libadwaita/* "$user_home/.config/gtk-4.0/"
-    chown -R "$user:$user" "$user_home/.config/gtk-4.0"
-
-    # GNOME Shell extension (Flat-Remix-GS)
-    if [ "$XDG_CURRENT_DESKTOP" = "GNOME" ] && [ -d "/usr/share/themes/Flat-Remix-GS" ]; then
-        printMsg "Installing GNOME Shell theme from Flat-Remix-GS..."
-        cp -r /usr/share/themes/Flat-Remix-GS ~/.themes/
-        chown -R "$user:$user" ~/.themes/Flat-Remix-GS
-    fi
-
-    # Backup user settings before applying new theme
-    backup_settings "$user" "$user_home"
-
-    printMsg "Applying theme..."
-    case "$XDG_CURRENT_DESKTOP" in
-        GNOME)
-            su - "$user" -c "
-                export DISPLAY=:0
-                export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$user")/bus
-                gsettings set org.gnome.desktop.interface cursor-theme '$CURSOR'
-                gsettings set org.gnome.desktop.interface icon-theme 'Flat-Remix-Icons'
-                gsettings set org.gnome.desktop.interface gtk-theme 'Flat-Remix-GTK'
-                gsettings set org.gnome.shell.extensions.user-theme name 'Flat-Remix-GTK'
-                gsettings set org.gnome.desktop.background picture-uri 'file://$wallpaper'
-                gsettings set org.gnome.desktop.background picture-uri-dark 'file://$wallpaper'
-            "
-            ;;
-        X-Cinnamon)
-            gsettings set org.cinnamon.desktop.interface gtk-theme 'Flat-Remix-GTK'
-            gsettings set org.cinnamon.desktop.interface icon-theme 'Flat-Remix-Icons'
-            gsettings set org.cinnamon.desktop.interface cursor-theme "$CURSOR"
-            gsettings set org.cinnamon.theme name "Flat-Remix-Cinnamon"
-            ;;
-        XFCE)
-            xfconf-query -c xsettings -p /Net/IconThemeName -s "Flat-Remix-Icons"
-            xfconf-query -c xsettings -p /Net/ThemeName -s "Flat-Remix-GTK"
-            ;;
-    esac
-
-    printMsg "Flat-Remix successfully applied!"
-}
-
-post_remove() {
-    local user=$(logname)
-    local user_home=$(getent passwd "$user" | cut -d: -f6)
-
-    printMsg "Reverting Flat-Remix changes..."
-    restore_settings "$user" "$user_home"
-
-    # Remove theme directories
-    rm -rf /usr/share/themes/Flat-Remix-GTK
-    rm -rf /usr/share/icons/Flat-Remix-Icons
-    rm -rf /usr/share/themes/Flat-Remix-Cinnamon
-    rm -rf ~/.themes/Flat-Remix-GS
-    rm -f /usr/share/wallpapers/flat-remix-wallpaper.avif
-
-    # Remove GTK config
-    rm -rf "$user_home/.config/gtk-4.0"
-
-    printMsg "Flat-Remix files and configurations removed successfully."
-}
-
-post_upgrade() {
-    printMsg "Reapplying Flat-Remix configuration after upgrade..."
-    post_install
+    # Wallpaper
+    install -Dm644 usr/share/wallpapers/Flat-Remix.jpg "${pkgdir}/usr/share/wallpapers/Flat-Remix.jpg"
 }
